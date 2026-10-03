@@ -153,6 +153,22 @@ func writeMetrics(w io.Writer, s collector.Snapshot) {
 		fmt.Fprintf(w, "netscope_process_rate_bytes_per_second{%s} %g\n", label("process", p), rates[p])
 	}
 
+	counter("netscope_capture_packets_total", "Packets seen by the packet capture.")
+	fmt.Fprintf(w, "netscope_capture_packets_total %d\n", s.Capture.Packets)
+	gauge("netscope_capture_packets_per_second", "Packet rate seen by the packet capture.")
+	fmt.Fprintf(w, "netscope_capture_packets_per_second %g\n", s.Capture.PPS)
+	gauge("netscope_capture_bytes_per_second", "Byte rate seen by the packet capture.")
+	fmt.Fprintf(w, "netscope_capture_bytes_per_second %g\n", s.Capture.BPS)
+	gauge("netscope_capture_protocol_packets", "Packets seen by the capture, by protocol.")
+	protos := make([]string, 0, len(s.Capture.Protocols))
+	for p := range s.Capture.Protocols {
+		protos = append(protos, p)
+	}
+	sort.Strings(protos)
+	for _, p := range protos {
+		fmt.Fprintf(w, "netscope_capture_protocol_packets{%s} %d\n", label("protocol", p), s.Capture.Protocols[p])
+	}
+
 	gauge("netscope_probe_up", "1 if the TCP target or gateway answered this sample.")
 	gauge("netscope_probe_rtt_seconds", "TCP connect round-trip time to the target.")
 	for _, p := range s.Targets {

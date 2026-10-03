@@ -30,7 +30,7 @@ jobs:
           docker rm -f netscope 2>/dev/null || true
           docker run -d --name netscope --restart unless-stopped \
             --net=host --pid=host \
-            --cap-add SYS_PTRACE --security-opt apparmor=unconfined \
+            --cap-add SYS_PTRACE --cap-add NET_RAW --security-opt apparmor=unconfined \
             netscope:latest -serve :9110
       - name: Wait for data
         run: |

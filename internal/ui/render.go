@@ -56,6 +56,8 @@ func (m Model) View() string {
 		return strings.Join(m.healthPanel(w, h), "\n")
 	case "4":
 		return strings.Join(m.connPanel(w, h), "\n")
+	case "5":
+		return strings.Join(m.packetsPanel(w, h), "\n")
 	}
 
 	if m.lite {
@@ -96,26 +98,26 @@ func clamp(v, lo, hi int) int {
 
 func (m Model) netPanel(w, h int) []string {
 	meta := fmt.Sprintf("%s · %s", m.primaryIface(), m.snap.At.Format("15:04:05"))
-	keys := "1-4 zoom  V view  p pause  q quit"
+	keys := "1-5 zoom  V view  p pause  q quit"
 	if m.paused {
 		meta = warn.Render("paused") + muted.Render(" · "+meta)
-		keys = "1-4 zoom  V view  p resume  q quit"
+		keys = "1-5 zoom  V view  p resume  q quit"
 	}
 	return panel("1", "net", meta, w, h, m.netBody(w-4, h-2), keys)
 }
 
 func (m Model) ifacePanel(w, h int) []string {
-	return panel("2", "ifaces", fmt.Sprintf("%d active", m.activeCount()), w, h, m.ifaceBody(w-4, h-2), "1-4 zoom")
+	return panel("2", "ifaces", fmt.Sprintf("%d active", m.activeCount()), w, h, m.ifaceBody(w-4, h-2), "1-5 zoom")
 }
 
 func (m Model) healthPanel(w, h int) []string {
-	return panel("3", "health", m.healthMeta(), w, h, m.healthBody(w-4, h-2), "1-4 zoom")
+	return panel("3", "health", m.healthMeta(), w, h, m.healthBody(w-4, h-2), "1-5 zoom")
 }
 
 func (m Model) connPanel(w, h int) []string {
 	groups := groupsOf(m.snap.Conns)
 	meta := fmt.Sprintf("%d in %d procs · sort ↓ rate", len(m.snap.Conns), len(groups))
-	return panel("4", "conns", meta, w, h, m.connBody(w-4, h-2), "↑↓ select  space fold  z fold all  1-4 zoom  q quit")
+	return panel("4", "conns", meta, w, h, m.connBody(w-4, h-2), "↑↓ select  space fold  z fold all  1-5 zoom  q quit")
 }
 
 func (m Model) primaryIface() string {
@@ -845,4 +847,81 @@ func trunc(s string, n int) string {
 		return s
 	}
 	return string(r[:n-1]) + "…"
+}
+
+func (m Model) packetsPanel(w, h int) []string {
+	meta := "off"
+	if m.snap.Capture.Enabled {
+		meta = fmt.Sprintf("%s pps", humanCount(uint64(m.snap.Capture.PPS)))
+	}
+	return panel("5", "packets", meta, w, h, m.packetsBody(w-4, h-2), "1-5 zoom  q quit")
+}
+
+func (m Model) packetsBody(inner, rows int) []string {
+	c := m.snap.Capture
+	if !c.Enabled {
+		msg := c.Error
+		if msg == "" {
+			msg = "capture is off (-capture=false)"
+		}
+		return []string{dim.Render("packet capture unavailable: " + msg)}
+	}
+
+	var out []string
+	out = append(out, muted.Render(fmt.Sprintf("%s · %s · %s packets seen",
+		humanRate(c.BPS), fmt.Sprintf("%.0f pps", c.PPS), humanCount(c.Packets))))
+	out = append(out, muted.Render(protoSummary(c.Protocols)))
+
+	half := inner / 2
+	out = append(out, pad(bold.Render("DNS QUERIES"), half)+bold.Render("TLS SERVER NAMES"))
+	dns, sni := c.DNS, c.SNI
+	for i := 0; i < 8; i++ {
+		left, right := "", ""
+		if i < len(dns) {
+			left = fmt.Sprintf("%s %s", trunc(dns[i].Name, half-8), dim.Render(fmt.Sprintf("%d", dns[i].Count)))
+		}
+		if i < len(sni) {
+			right = fmt.Sprintf("%s %s", trunc(sni[i].Name, inner-half-8), dim.Render(fmt.Sprintf("%d", sni[i].Count)))
+		}
+		out = append(out, pad(left, half)+right)
+	}
+
+	out = append(out, muted.Render("TOP FLOWS"))
+	for _, f := range c.Flows {
+		if len(out) >= rows-6 {
+			break
+		}
+		out = append(out, fmt.Sprintf("%s %s → %s %s",
+			pad(f.Proto, 5), pad(trunc(f.Src, 24), 24), pad(trunc(f.Dst, 24), 24), dim.Render(humanBytes(f.Bytes))))
+	}
+
+	out = append(out, muted.Render("RECENT"))
+	for i := len(c.Recent) - 1; i >= 0 && len(out) < rows; i-- {
+		p := c.Recent[i]
+		label := p.DNSName + " " + p.DNSType + p.SNI
+		out = append(out, fmt.Sprintf("%s %s → %s %s",
+			pad(p.Proto, 5), pad(trunc(p.Src, 24), 24), pad(trunc(p.Dst, 24), 24), dim.Render(trunc(label, inner-60))))
+	}
+	if len(out) > rows {
+		out = out[:rows]
+	}
+	return out
+}
+
+func protoSummary(p map[string]uint64) string {
+	var total uint64
+	for _, n := range p {
+		total += n
+	}
+	if total == 0 {
+		return "no packets yet"
+	}
+	order := []string{"tcp", "udp", "icmp", "icmpv6", "other"}
+	var parts []string
+	for _, k := range order {
+		if n := p[k]; n > 0 {
+			parts = append(parts, fmt.Sprintf("%s %.0f%%", k, float64(n)/float64(total)*100))
+		}
+	}
+	return strings.Join(parts, "  ")
 }

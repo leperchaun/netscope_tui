@@ -26,10 +26,14 @@ func main() {
 	dnsName := flag.String("dns-name", "example.com", "name to resolve when probing DNS servers")
 	targets := flag.String("targets", "", "comma-separated host:port TCP connect targets")
 	once := flag.Bool("once", false, "print one JSON snapshot and exit")
+	capture := flag.Bool("capture", true, "capture packets for DNS and TLS names (Linux, needs CAP_NET_RAW)")
 	serveAddr := flag.String("serve", "", "run headless and serve /healthz, /api/snapshot, /metrics on this address (e.g. :9110)")
 	flag.Parse()
 
 	sampler := collector.NewSampler(splitList(*targets), resolvers(*dnsFlag), *dnsName)
+	if *capture {
+		sampler.StartCapture()
+	}
 
 	if *serveAddr != "" {
 		if err := serve(sampler, *serveAddr, *interval); err != nil {

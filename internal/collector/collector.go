@@ -9,6 +9,7 @@ import (
 
 	gnet "github.com/shirou/gopsutil/v4/net"
 	"github.com/shirou/gopsutil/v4/process"
+	"netscope/internal/capture"
 )
 
 const probeTimeout = 2 * time.Second
@@ -43,21 +44,22 @@ type Conn struct {
 }
 
 type Snapshot struct {
-	At             time.Time      `json:"at"`
-	Interfaces     []Interface    `json:"interfaces"`
-	TCPStates      map[string]int `json:"tcp_states"`
-	Conns          []Conn         `json:"connections"`
-	DNS            []DNSProbe     `json:"dns"`
-	Targets        []Probe        `json:"targets"`
-	RxBps          float64        `json:"rx_bps"`
-	TxBps          float64        `json:"tx_bps"`
-	RxPackets      uint64         `json:"rx_packets"`
-	TxPackets      uint64         `json:"tx_packets"`
-	RxDrops        uint64         `json:"rx_drops"`
-	TxDrops        uint64         `json:"tx_drops"`
-	Retrans        uint64         `json:"retrans"`
-	OutOfOrder     uint64         `json:"out_of_order"`
-	HasTCPCounters bool           `json:"tcp_counters"`
+	At             time.Time        `json:"at"`
+	Interfaces     []Interface      `json:"interfaces"`
+	TCPStates      map[string]int   `json:"tcp_states"`
+	Conns          []Conn           `json:"connections"`
+	DNS            []DNSProbe       `json:"dns"`
+	Targets        []Probe          `json:"targets"`
+	RxBps          float64          `json:"rx_bps"`
+	TxBps          float64          `json:"tx_bps"`
+	RxPackets      uint64           `json:"rx_packets"`
+	TxPackets      uint64           `json:"tx_packets"`
+	RxDrops        uint64           `json:"rx_drops"`
+	TxDrops        uint64           `json:"tx_drops"`
+	Retrans        uint64           `json:"retrans"`
+	OutOfOrder     uint64           `json:"out_of_order"`
+	HasTCPCounters bool             `json:"tcp_counters"`
+	Capture        capture.Snapshot `json:"capture"`
 }
 
 type ioCount struct{ rx, tx uint64 }
@@ -73,6 +75,7 @@ type Sampler struct {
 	prevSockAt time.Time
 	procNames  map[int32]string
 	names      *namer
+	packets    *capture.Stats
 }
 
 func NewSampler(targets, resolvers []string, dnsName string) *Sampler {
@@ -84,6 +87,14 @@ func NewSampler(targets, resolvers []string, dnsName string) *Sampler {
 		procNames: map[int32]string{},
 		names:     newNamer(),
 		gateway:   defaultGateway(),
+		packets:   capture.NewStats(),
+	}
+}
+
+// StartCapture begins raw packet capture. Failures are reported in the snapshot, not returned.
+func (s *Sampler) StartCapture() {
+	if err := capture.Start(s.packets); err != nil {
+		s.packets.SetError(err.Error())
 	}
 }
 
@@ -128,6 +139,7 @@ func (s *Sampler) Sample() (Snapshot, error) {
 	snap.Retrans, snap.OutOfOrder, snap.HasTCPCounters = tcpCounters()
 	s.sockets(&snap, now, socketRows())
 
+	snap.Capture = s.packets.Snapshot(now)
 	snap.DNS = s.probeDNSAll()
 	snap.Targets = s.probeAll()
 	return snap, nil

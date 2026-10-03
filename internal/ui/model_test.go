@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"netscope/internal/capture"
 	"netscope/internal/collector"
 )
 
@@ -123,5 +124,27 @@ func TestDetailShowsSelectedProcess(t *testing.T) {
 	v := m.View()
 	if !strings.Contains(v, "connections to 2 hosts") {
 		t.Fatal("detail block should describe the selected process")
+	}
+}
+
+func TestPacketsPanelFitsWidth(t *testing.T) {
+	for _, enabled := range []bool{false, true} {
+		m := newFixtureModel(t, 130, 46)
+		m.zoom = "5"
+		if enabled {
+			m.snap.Capture = capture.Snapshot{
+				Enabled: true, PPS: 120, BPS: 9e4, Packets: 5000,
+				Protocols: map[string]uint64{"tcp": 80, "udp": 20},
+				DNS:       []capture.Name{{Name: "nas.example.lan", Count: 4}},
+				SNI:       []capture.Name{{Name: "api.example.org", Count: 9}},
+				Flows:     []capture.Flow{{Src: "10.0.0.5:51000", Dst: "93.184.216.34:443", Proto: "tcp", Bytes: 2048}},
+				Recent:    []capture.Packet{{Proto: "udp", Src: "10.0.0.5:40000", Dst: "192.168.2.88:53", DNSName: "nas.example.lan", DNSType: "A"}},
+			}
+		}
+		for _, line := range strings.Split(m.View(), "\n") {
+			if w := lipgloss.Width(line); w != 130 {
+				t.Fatalf("capture=%v: line width %d: %q", enabled, w, line)
+			}
+		}
 	}
 }

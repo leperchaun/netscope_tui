@@ -118,7 +118,7 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 	switch k {
 	case "q", "ctrl+c", "esc":
 		return m, tea.Quit
-	case "1", "2", "3", "4":
+	case "1", "2", "3", "4", "5":
 		if m.zoom == k {
 			m.zoom = ""
 		} else {

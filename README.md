@@ -26,7 +26,7 @@ Container (Linux, where host networking works):
 docker compose run --rm netscope        # uses network_mode: host, pid: host
 ```
 
-On Linux, process names for sockets need `--cap-add SYS_PTRACE --security-opt apparmor=unconfined`. Without them Docker's AppArmor profile blocks reading other processes' file descriptors and sockets show as `(unknown)`.
+On Linux, process names for sockets need `--cap-add SYS_PTRACE --security-opt apparmor=unconfined`, and packet capture (DNS names and TLS server names) needs `--cap-add NET_RAW`. Without them Docker's AppArmor profile blocks reading other processes' file descriptors and sockets show as `(unknown)`.
 
 Inside the container, `auto` finds Docker Desktop's internal resolver (`192.168.65.x`), not your network's. Pass your real resolver instead:
 
