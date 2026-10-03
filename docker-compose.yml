@@ -1,0 +1,13 @@
+services:
+  netscope:
+    build: .
+    image: netscope:latest
+    # Host networking and host PID namespace let the container see the host's
+    # interfaces and sockets. This only works on Linux. On macOS and Windows,
+    # Docker runs inside a Linux VM, so this shows the VM's network, not yours;
+    # use the native binary there (see README).
+    network_mode: host
+    pid: host
+    command: ["-dns", "${NETSCOPE_DNS:-auto}"]
+    stdin_open: true
+    tty: true
