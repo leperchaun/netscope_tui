@@ -34,10 +34,10 @@ func (s *Store) put(snap collector.Snapshot, err error) {
 	}
 }
 
-func (s *Store) get() (collector.Snapshot, error, time.Time, uint64) {
+func (s *Store) get() (collector.Snapshot, time.Time, uint64, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.snap, s.err, s.sampledAt, s.samples
+	return s.snap, s.sampledAt, s.samples, s.err
 }
 
 // Run samples on an interval until ctx is cancelled.
@@ -59,7 +59,7 @@ func Run(ctx context.Context, sampler *collector.Sampler, store *Store, interval
 func Handler(store *Store, interval time.Duration) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-		_, err, at, samples := store.get()
+		_, at, samples, err := store.get()
 		fresh := !at.IsZero() && time.Since(at) < 5*interval && samples >= 2
 		if !fresh {
 			msg := "no fresh sample"
@@ -72,7 +72,7 @@ func Handler(store *Store, interval time.Duration) http.Handler {
 		fmt.Fprintf(w, "ok samples=%d\n", samples)
 	})
 	mux.HandleFunc("/api/snapshot", func(w http.ResponseWriter, r *http.Request) {
-		snap, err, _, _ := store.get()
+		snap, _, _, err := store.get()
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusServiceUnavailable)
 			return

@@ -269,9 +269,7 @@ func (m Model) timelineTab(w, h int) []string {
 	if start < 0 {
 		start = 0
 	}
-	for _, e := range m.events[start:] {
-		rows = append(rows, e)
-	}
+	rows = append(rows, m.events[start:]...)
 	if len(m.events) == 0 {
 		rows = append(rows, dim.Render("no changes yet"))
 	}

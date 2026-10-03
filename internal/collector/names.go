@@ -55,6 +55,9 @@ func (n *namer) resolve(ip string) {
 }
 
 func serviceName(port uint32) string {
+	if port > 0xffff {
+		return strconv.Itoa(int(port))
+	}
 	if name, ok := wellKnownPorts[uint16(port)]; ok {
 		return name
 	}

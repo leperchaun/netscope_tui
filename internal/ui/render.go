@@ -492,13 +492,6 @@ func (m Model) connBody(inner, rows int) []string {
 	return out
 }
 
-func hostWithCountry(host, country string) string {
-	if country == "" {
-		return host
-	}
-	return host + " [" + country + "]"
-}
-
 func rateCell(bps float64, known bool, style lipgloss.Style) string {
 	if !known {
 		return dim.Render("--")
@@ -673,7 +666,7 @@ func graph(rxS, txS []float64, cols, upRows, downRows int) (upper, lower []strin
 	for r := 0; r < rows; r++ {
 		var sb strings.Builder
 		for c := 0; c < cols; c++ {
-			sb.WriteRune(rune(0x2800 + int(bits[r][c])))
+			sb.WriteRune(rune(0x2800 + int(bits[r][c]))) // #nosec G115 -- uint8 offset stays in the Braille block
 		}
 		if r < upRows {
 			upper = append(upper, rxStyle.Render(sb.String()))

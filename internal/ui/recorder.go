@@ -23,7 +23,7 @@ func (m *Model) toggleRecording() {
 		return
 	}
 	name := fmt.Sprintf("netscope-%s.jsonl", time.Now().Format("20060102-150405"))
-	f, err := os.Create(name)
+	f, err := os.Create(name) // #nosec G304 -- name is a fixed timestamped pattern, not user input
 	if err != nil {
 		m.recMsg = "record failed: " + err.Error()
 		return

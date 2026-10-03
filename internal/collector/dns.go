@@ -34,7 +34,7 @@ func SystemResolvers() []string {
 }
 
 func unixResolvers(path string) []string {
-	f, err := os.Open(path)
+	f, err := os.Open(path) // #nosec G304 -- only called with the constant /etc/resolv.conf
 	if err != nil {
 		return nil
 	}

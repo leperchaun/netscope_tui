@@ -111,7 +111,7 @@ func serve(sampler *collector.Sampler, addr string, interval time.Duration) erro
 	defer stop()
 	store := &server.Store{}
 	go server.Run(ctx, sampler, store, interval)
-	srv := &http.Server{Addr: addr, Handler: server.Handler(store, interval)}
+	srv := &http.Server{Addr: addr, Handler: server.Handler(store, interval), ReadHeaderTimeout: 10 * time.Second}
 	go func() {
 		<-ctx.Done()
 		_ = srv.Shutdown(context.Background())

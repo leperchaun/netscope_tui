@@ -2,7 +2,7 @@ export CGO_ENABLED := 0
 BIN := bin/netscope
 PLATFORMS := darwin/arm64 darwin/amd64 linux/amd64 linux/arm64 windows/amd64 windows/arm64
 
-.PHONY: build test release image run clean
+.PHONY: build test security release image run clean
 
 build:
 	CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o $(BIN) .
@@ -10,6 +10,9 @@ build:
 test:
 	go vet ./...
 	go test ./...
+
+security:
+	docker build --target security -t netscope:security .
 
 release:
 	@mkdir -p dist

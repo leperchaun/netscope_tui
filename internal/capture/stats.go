@@ -51,7 +51,6 @@ type Stats struct {
 	dns       map[string]uint64
 	sni       map[string]uint64
 	recent    []Packet
-	lastAt    time.Time
 	lastPk    uint64
 	lastBytes uint64
 	rateAt    time.Time
@@ -85,7 +84,7 @@ func (s *Stats) Add(p Packet) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.packets++
-	s.bytes += uint64(p.Len)
+	s.bytes += uint64(p.Len) // #nosec G115 -- Len is len(frame), never negative
 	s.protos[p.Proto]++
 
 	k := flowKey{p.Src, p.Dst, p.Proto}
@@ -98,7 +97,7 @@ func (s *Stats) Add(p Packet) {
 		s.flows[k] = f
 	}
 	f.Packets++
-	f.Bytes += uint64(p.Len)
+	f.Bytes += uint64(p.Len) // #nosec G115 -- Len is len(frame), never negative
 
 	if p.DNSName != "" {
 		s.count(s.dns, p.DNSName)

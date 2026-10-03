@@ -81,3 +81,17 @@ Note that Apple's `/usr/bin/make` requires an accepted Xcode license (`sudo xcod
 
 A `--` in the table means that platform does not expose the value. The container needs `ss` and `ip` (installed in the image via `iproute2`) for the Linux rows.
 
+
+## Security checks
+
+Every pull request runs `.gitea/workflows/security.yml`:
+
+| Check | Tool | Fails on |
+|---|---|---|
+| Committed secrets | gitleaks | any match |
+| Static analysis | staticcheck | any finding |
+| Security lint | gosec | any finding not marked `// #nosec <rule> -- <reason>` |
+| Vulnerable dependencies | govulncheck | a known vulnerability reachable from netscope's code |
+| Release image | Trivy | HIGH or CRITICAL CVEs that have a fix |
+
+Run the first four locally with `make security`.
