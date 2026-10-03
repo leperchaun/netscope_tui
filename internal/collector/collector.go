@@ -10,6 +10,7 @@ import (
 	gnet "github.com/shirou/gopsutil/v4/net"
 	"github.com/shirou/gopsutil/v4/process"
 	"netscope/internal/capture"
+	"netscope/internal/geo"
 )
 
 const probeTimeout = 2 * time.Second
@@ -41,6 +42,7 @@ type Conn struct {
 	TxBps   float64 `json:"tx_bps"`
 	RTTms   float64 `json:"rtt_ms"`
 	HasIO   bool    `json:"io_known"`
+	Country string  `json:"country,omitempty"`
 }
 
 type Snapshot struct {
@@ -76,6 +78,7 @@ type Sampler struct {
 	procNames  map[int32]string
 	names      *namer
 	packets    *capture.Stats
+	geo        *geo.DB
 }
 
 func NewSampler(targets, resolvers []string, dnsName string) *Sampler {
@@ -89,6 +92,11 @@ func NewSampler(targets, resolvers []string, dnsName string) *Sampler {
 		gateway:   defaultGateway(),
 		packets:   capture.NewStats(),
 	}
+}
+
+// SetGeo enables country lookups for remote addresses.
+func (s *Sampler) SetGeo(db *geo.DB) {
+	s.geo = db
 }
 
 // StartCapture begins raw packet capture. Failures are reported in the snapshot, not returned.
@@ -168,6 +176,9 @@ func (s *Sampler) sockets(snap *Snapshot, now time.Time, raw []socketRow) {
 			State:   r.State,
 			RTTms:   r.RTTms,
 			HasIO:   r.HasIO,
+		}
+		if s.geo != nil {
+			c.Country, _ = s.geo.Lookup(r.RemoteIP)
 		}
 		if r.HasIO {
 			k := r.key()

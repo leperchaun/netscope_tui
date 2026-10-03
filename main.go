@@ -16,6 +16,7 @@ import (
 	"syscall"
 
 	"netscope/internal/collector"
+	"netscope/internal/geo"
 	"netscope/internal/server"
 	"netscope/internal/ui"
 )
@@ -26,6 +27,8 @@ func main() {
 	dnsName := flag.String("dns-name", "example.com", "name to resolve when probing DNS servers")
 	targets := flag.String("targets", "", "comma-separated host:port TCP connect targets")
 	once := flag.Bool("once", false, "print one JSON snapshot and exit")
+	geoPath := flag.String("geoip", "", "MaxMind GeoLite2/GeoIP2 .mmdb file for remote country lookups")
+	themeName := flag.String("theme", "default", "colour theme: default or mono")
 	capture := flag.Bool("capture", true, "capture packets for DNS and TLS names (Linux, needs CAP_NET_RAW)")
 	serveAddr := flag.String("serve", "", "run headless and serve /healthz, /api/snapshot, /metrics on this address (e.g. :9110)")
 	flag.Parse()
@@ -34,6 +37,15 @@ func main() {
 	if *capture {
 		sampler.StartCapture()
 	}
+	if *geoPath != "" {
+		db, err := geo.Open(*geoPath)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "warning:", err, "(continuing without country lookups)")
+		} else {
+			sampler.SetGeo(db)
+		}
+	}
+	ui.ApplyTheme(*themeName)
 
 	if *serveAddr != "" {
 		if err := serve(sampler, *serveAddr, *interval); err != nil {
@@ -99,7 +111,7 @@ func serve(sampler *collector.Sampler, addr string, interval time.Duration) erro
 	defer stop()
 	store := &server.Store{}
 	go server.Run(ctx, sampler, store, interval)
-	srv := &http.Server{Addr: addr, Handler: server.Handler(store, interval)}
+	srv := &http.Server{Addr: addr, Handler: server.Handler(store, interval), ReadHeaderTimeout: 10 * time.Second}
 	go func() {
 		<-ctx.Done()
 		_ = srv.Shutdown(context.Background())
