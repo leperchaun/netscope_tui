@@ -42,7 +42,8 @@ jobs:
       - name: Check the snapshot has interfaces, sockets, and rates
         run: |
           snap=$(curl -fsS "$NETSCOPE_URL/api/snapshot")
-          echo "$snap" | grep -q '"interfaces"'
-          echo "$snap" | grep -q '"tcp_states"'
-          echo "$snap" | grep -q '"tcp_counters": true'
-          curl -fsS "$NETSCOPE_URL/metrics" | grep -q '^netscope_network_rx_bytes_per_second'
+          grep -q '"interfaces"' <<< "$snap"
+          grep -q '"tcp_states"' <<< "$snap"
+          grep -q '"tcp_counters": true' <<< "$snap"
+          metrics=$(curl -fsS "$NETSCOPE_URL/metrics")
+          grep -q '^netscope_network_rx_bytes_per_second' <<< "$metrics"
