@@ -10,7 +10,13 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"context"
+	"net/http"
+	"os/signal"
+	"syscall"
+
 	"netscope/internal/collector"
+	"netscope/internal/server"
 	"netscope/internal/ui"
 )
 
@@ -20,9 +26,22 @@ func main() {
 	dnsName := flag.String("dns-name", "example.com", "name to resolve when probing DNS servers")
 	targets := flag.String("targets", "", "comma-separated host:port TCP connect targets")
 	once := flag.Bool("once", false, "print one JSON snapshot and exit")
+	capture := flag.Bool("capture", true, "capture packets for DNS and TLS names (Linux, needs CAP_NET_RAW)")
+	serveAddr := flag.String("serve", "", "run headless and serve /healthz, /api/snapshot, /metrics on this address (e.g. :9110)")
 	flag.Parse()
 
 	sampler := collector.NewSampler(splitList(*targets), resolvers(*dnsFlag), *dnsName)
+	if *capture {
+		sampler.StartCapture()
+	}
+
+	if *serveAddr != "" {
+		if err := serve(sampler, *serveAddr, *interval); err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	if *once {
 		if err := printOnce(sampler); err != nil {
@@ -73,4 +92,21 @@ func splitList(s string) []string {
 		}
 	}
 	return out
+}
+
+func serve(sampler *collector.Sampler, addr string, interval time.Duration) error {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	store := &server.Store{}
+	go server.Run(ctx, sampler, store, interval)
+	srv := &http.Server{Addr: addr, Handler: server.Handler(store, interval)}
+	go func() {
+		<-ctx.Done()
+		_ = srv.Shutdown(context.Background())
+	}()
+	fmt.Fprintf(os.Stderr, "netscope serving on %s\n", addr)
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		return err
+	}
+	return nil
 }
