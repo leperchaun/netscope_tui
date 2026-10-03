@@ -54,9 +54,28 @@ make release
 
 Note that Apple's `/usr/bin/make` requires an accepted Xcode license (`sudo xcodebuild -license`). Plain `go build` works without it since the build sets `CGO_ENABLED=0`.
 
-## Not yet implemented
+## Keys
 
-- Packet capture and protocol decoding (would need libpcap/Npcap and elevated privileges)
-- Process attribution for connections
-- Default-gateway detection (targets are passed explicitly for now)
-- Alerts or history persistence
+| Key | Action |
+|---|---|
+| `↑` `↓` / `k` `j` | select a process in the connections panel |
+| `space` | fold or unfold the selected process |
+| `z` | fold all, or unfold all if any are open |
+| `1`–`4` | zoom a panel to full screen (press again to return) |
+| `V` | toggle the compact (lite) layout |
+| `p` | pause or resume sampling |
+| `q` | quit |
+
+## What each platform reports
+
+| Data | macOS | Linux | Windows |
+|---|---|---|---|
+| Interface rates, errors, packets, drops | yes | yes | yes |
+| TCP states, process and PID per socket | yes (`netstat`) | yes (gopsutil) | yes (gopsutil) |
+| Per-connection and per-process rates | yes (`netstat` byte counters) | yes (`ss`) | no |
+| Per-connection RTT | no (not in `netstat`) | yes (`ss`) | no |
+| Retransmits, out-of-order segments | yes (`netstat -s`) | yes (`/proc/net/snmp`) | no |
+| Default gateway probe | yes (`route`) | yes (`ip route`) | no |
+
+A `--` in the table means that platform does not expose the value. The container needs `ss` and `ip` (installed in the image via `iproute2`) for the Linux rows.
+
