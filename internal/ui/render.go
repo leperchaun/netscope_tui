@@ -47,32 +47,24 @@ func (m Model) View() string {
 		return dim.Render("collecting first sample...") + "\n"
 	}
 
-	switch m.zoom {
-	case "1":
-		return strings.Join(m.netPanel(w, h), "\n")
-	case "2":
-		return strings.Join(m.ifacePanel(w, h), "\n")
-	case "3":
-		return strings.Join(m.healthPanel(w, h), "\n")
-	case "4":
-		return strings.Join(m.connPanel(w, h), "\n")
-	case "5":
-		return strings.Join(m.packetsPanel(w, h), "\n")
+	lines := []string{m.tabBar(w)}
+	if m.tab != 0 {
+		return strings.Join(append(lines, m.body(w, h-1)...), "\n")
 	}
-
 	if m.lite {
-		netH := clamp(h*34/100, 9, h-6)
-		lines := m.netPanel(w, netH)
-		lines = append(lines, m.connPanel(w, h-netH)...)
+		netH := clamp((h-1)*34/100, 9, h-7)
+		lines = append(lines, m.netPanel(w, netH)...)
+		lines = append(lines, m.connPanel(w, h-1-netH)...)
 		return strings.Join(lines, "\n")
 	}
 
-	topH := h * 40 / 100
-	midH := h * 28 / 100
-	botH := h - topH - midH
+	dashH := h - 1
+	topH := dashH * 40 / 100
+	midH := dashH * 28 / 100
+	botH := dashH - topH - midH
 	leftW := w * 44 / 100
 
-	lines := m.netPanel(w, topH)
+	lines = append(lines, m.netPanel(w, topH)...)
 	gap := make([]string, midH)
 	for i := range gap {
 		gap[i] = " "
@@ -98,26 +90,26 @@ func clamp(v, lo, hi int) int {
 
 func (m Model) netPanel(w, h int) []string {
 	meta := fmt.Sprintf("%s · %s", m.primaryIface(), m.snap.At.Format("15:04:05"))
-	keys := "1-5 zoom  V view  p pause  q quit"
+	keys := "V view  p pause  f freeze  r record  q quit"
 	if m.paused {
 		meta = warn.Render("paused") + muted.Render(" · "+meta)
-		keys = "1-5 zoom  V view  p resume  q quit"
+		keys = "V view  p resume  f freeze  r record  q quit"
 	}
 	return panel("1", "net", meta, w, h, m.netBody(w-4, h-2), keys)
 }
 
 func (m Model) ifacePanel(w, h int) []string {
-	return panel("2", "ifaces", fmt.Sprintf("%d active", m.activeCount()), w, h, m.ifaceBody(w-4, h-2), "1-5 zoom")
+	return panel("2", "ifaces", fmt.Sprintf("%d active", m.activeCount()), w, h, m.ifaceBody(w-4, h-2), "")
 }
 
 func (m Model) healthPanel(w, h int) []string {
-	return panel("3", "health", m.healthMeta(), w, h, m.healthBody(w-4, h-2), "1-5 zoom")
+	return panel("3", "health", m.healthMeta(), w, h, m.healthBody(w-4, h-2), "")
 }
 
 func (m Model) connPanel(w, h int) []string {
-	groups := groupsOf(m.snap.Conns)
-	meta := fmt.Sprintf("%d in %d procs · sort ↓ rate", len(m.snap.Conns), len(groups))
-	return panel("4", "conns", meta, w, h, m.connBody(w-4, h-2), "↑↓ select  space fold  z fold all  1-5 zoom  q quit")
+	groups := groupsOf(m.visibleConns())
+	meta := fmt.Sprintf("%d in %d procs · sort ↓ rate", len(m.visibleConns()), len(groups))
+	return panel("4", "conns", meta, w, h, m.connBody(w-4, h-2), "↑↓ select  space fold  z fold all  / filter  q quit")
 }
 
 func (m Model) primaryIface() string {
@@ -441,7 +433,7 @@ func (l connLayout) row(marker, proc, pid, remote, port, proto, down, up, rtt, s
 
 // connBody: the selected process is detailed on top; the process table is below it, busiest first.
 func (m Model) connBody(inner, rows int) []string {
-	groups := groupsOf(m.snap.Conns)
+	groups := groupsOf(m.visibleConns())
 	if len(groups) == 0 {
 		return []string{dim.Render("no established tcp connections (or insufficient privilege)")}
 	}
@@ -498,6 +490,13 @@ func (m Model) connBody(inner, rows int) []string {
 		out = out[:rows]
 	}
 	return out
+}
+
+func hostWithCountry(host, country string) string {
+	if country == "" {
+		return host
+	}
+	return host + " [" + country + "]"
 }
 
 func rateCell(bps float64, known bool, style lipgloss.Style) string {
@@ -854,7 +853,7 @@ func (m Model) packetsPanel(w, h int) []string {
 	if m.snap.Capture.Enabled {
 		meta = fmt.Sprintf("%s pps", humanCount(uint64(m.snap.Capture.PPS)))
 	}
-	return panel("5", "packets", meta, w, h, m.packetsBody(w-4, h-2), "1-5 zoom  q quit")
+	return panel("5", "packets", meta, w, h, m.packetsBody(w-4, h-2), "q quit")
 }
 
 func (m Model) packetsBody(inner, rows int) []string {

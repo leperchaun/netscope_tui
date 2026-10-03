@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"os"
 	"sort"
 	"time"
 
@@ -41,10 +42,16 @@ type Model struct {
 	width  int
 	height int
 
-	sampling bool
-	paused   bool
-	lite     bool
-	zoom     string
+	sampling  bool
+	paused    bool
+	frozen    bool
+	lite      bool
+	tab       int
+	host      string
+	filter    string
+	filtering bool
+	rec       *recorder
+	recMsg    string
 
 	selName  string
 	expanded map[string]bool
@@ -56,6 +63,12 @@ type Model struct {
 	sockHist map[string][]float64
 	probes   map[string][]collector.Probe
 
+	retransHist []float64
+	connHist    []float64
+	ppsHist     []float64
+	events      []string
+	probeDown   map[string]bool
+
 	have    bool
 	startAt time.Time
 	base    totals
@@ -63,16 +76,19 @@ type Model struct {
 }
 
 func New(sampler *collector.Sampler, interval time.Duration) Model {
+	host, _ := os.Hostname()
 	return Model{
-		sampler:  sampler,
-		interval: interval,
-		width:    defaultW,
-		height:   defaultH,
-		expanded: map[string]bool{},
-		ifHist:   map[string][]float64{},
-		procHist: map[string][]float64{},
-		sockHist: map[string][]float64{},
-		probes:   map[string][]collector.Probe{},
+		host:      host,
+		sampler:   sampler,
+		interval:  interval,
+		width:     defaultW,
+		height:    defaultH,
+		expanded:  map[string]bool{},
+		ifHist:    map[string][]float64{},
+		procHist:  map[string][]float64{},
+		sockHist:  map[string][]float64{},
+		probes:    map[string][]collector.Probe{},
+		probeDown: map[string]bool{},
 	}
 }
 
@@ -115,19 +131,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) key(k string) (tea.Model, tea.Cmd) {
+	if m.filtering {
+		return m.filterKey(k), nil
+	}
 	switch k {
-	case "q", "ctrl+c", "esc":
+	case "q", "ctrl+c":
+		m.closeRecorder()
 		return m, tea.Quit
-	case "1", "2", "3", "4", "5":
-		if m.zoom == k {
-			m.zoom = ""
-		} else {
-			m.zoom = k
+	case "esc":
+		if m.filter != "" {
+			m.filter = ""
+			return m, nil
 		}
+		m.closeRecorder()
+		return m, tea.Quit
+	case "1", "2", "3", "4", "5", "6", "7", "8", "9", "0":
+		m.tab = map[string]int{"1": 0, "2": 1, "3": 2, "4": 3, "5": 4, "6": 5, "7": 6, "8": 7, "9": 8, "0": 9}[k]
+	case "tab":
+		m.tab = (m.tab + 1) % len(tabNames)
 	case "V", "v":
 		m.lite = !m.lite
 	case "p":
 		m.paused = !m.paused
+	case "f":
+		m.frozen = !m.frozen
+	case "r":
+		m.toggleRecording()
+	case "/":
+		m.filtering = true
 	case "up", "k":
 		m.moveSel(-1)
 	case "down", "j":
@@ -140,6 +171,27 @@ func (m Model) key(k string) (tea.Model, tea.Cmd) {
 		m.foldAll()
 	}
 	return m, nil
+}
+
+func (m Model) filterKey(k string) Model {
+	switch k {
+	case "enter":
+		m.filtering = false
+	case "esc":
+		m.filtering = false
+		m.filter = ""
+	case "backspace":
+		if r := []rune(m.filter); len(r) > 0 {
+			m.filter = string(r[:len(r)-1])
+		}
+	case "space", " ":
+		m.filter += " "
+	default:
+		if len([]rune(k)) == 1 {
+			m.filter += k
+		}
+	}
+	return m
 }
 
 func (m *Model) moveSel(delta int) {
@@ -172,7 +224,15 @@ func (m Model) selIndex(groups []group) int {
 }
 
 func (m *Model) record(s collector.Snapshot) {
+	if m.frozen {
+		return
+	}
 	m.snap = s
+	m.retransHist = appendCapped(m.retransHist, float64(s.Retrans), historyLen)
+	m.connHist = appendCapped(m.connHist, float64(len(s.Conns)), historyLen)
+	m.ppsHist = appendCapped(m.ppsHist, s.Capture.PPS, historyLen)
+	m.trackProbeEvents(s)
+	m.writeRecording(s)
 	m.rxHist = appendCapped(m.rxHist, s.RxBps, historyLen)
 	m.txHist = appendCapped(m.txHist, s.TxBps, historyLen)
 

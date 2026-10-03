@@ -84,15 +84,19 @@ func TestSelectionAndFoldKeys(t *testing.T) {
 	}
 }
 
-func TestZoomLiteAndPauseKeys(t *testing.T) {
+func TestTabsLiteAndPauseKeys(t *testing.T) {
 	m := newFixtureModel(t, 130, 46)
-	m = send(t, m, "1")
-	if m.zoom != "1" {
-		t.Fatal("1 should zoom the net panel")
+	m = send(t, m, "2")
+	if m.tab != 1 {
+		t.Fatalf("2 should open the connections tab, tab=%d", m.tab)
+	}
+	m = send(t, m, "0")
+	if m.tab != 9 {
+		t.Fatalf("0 should open egress, tab=%d", m.tab)
 	}
 	m = send(t, m, "1")
-	if m.zoom != "" {
-		t.Fatal("1 again should unzoom")
+	if m.tab != 0 {
+		t.Fatal("1 should return to the dashboard")
 	}
 	m = send(t, m, "V")
 	if !m.lite {
@@ -101,6 +105,33 @@ func TestZoomLiteAndPauseKeys(t *testing.T) {
 	m = send(t, m, "p")
 	if !m.paused || !strings.Contains(m.View(), "paused") {
 		t.Fatal("p should pause and show it")
+	}
+}
+
+func TestFilterKeysNarrowConnections(t *testing.T) {
+	m := newFixtureModel(t, 130, 46)
+	m = send(t, m, "2")
+	m = send(t, m, "/")
+	for _, r := range "chrome" {
+		m = send(t, m, string(r))
+	}
+	m = send(t, m, "enter")
+	if m.filter != "chrome" || len(m.visibleConns()) != 2 {
+		t.Fatalf("filter=%q visible=%d", m.filter, len(m.visibleConns()))
+	}
+	m = send(t, m, "esc")
+	if m.filter != "" {
+		t.Fatal("esc should clear the filter")
+	}
+}
+
+func TestFreezeStopsUpdates(t *testing.T) {
+	m := newFixtureModel(t, 130, 46)
+	before := len(m.rxHist)
+	m = send(t, m, "f")
+	m.record(fixture(time.Now()))
+	if len(m.rxHist) != before {
+		t.Fatal("frozen display should not record new samples")
 	}
 }
 
@@ -127,23 +158,25 @@ func TestDetailShowsSelectedProcess(t *testing.T) {
 	}
 }
 
-func TestPacketsPanelFitsWidth(t *testing.T) {
-	for _, enabled := range []bool{false, true} {
-		m := newFixtureModel(t, 130, 46)
-		m.zoom = "5"
-		if enabled {
-			m.snap.Capture = capture.Snapshot{
-				Enabled: true, PPS: 120, BPS: 9e4, Packets: 5000,
-				Protocols: map[string]uint64{"tcp": 80, "udp": 20},
-				DNS:       []capture.Name{{Name: "nas.example.lan", Count: 4}},
-				SNI:       []capture.Name{{Name: "api.example.org", Count: 9}},
-				Flows:     []capture.Flow{{Src: "10.0.0.5:51000", Dst: "93.184.216.34:443", Proto: "tcp", Bytes: 2048}},
-				Recent:    []capture.Packet{{Proto: "udp", Src: "10.0.0.5:40000", Dst: "192.168.2.88:53", DNSName: "nas.example.lan", DNSType: "A"}},
+func TestEveryTabFitsWidth(t *testing.T) {
+	for tab := 0; tab < len(tabNames); tab++ {
+		for _, enabled := range []bool{false, true} {
+			m := newFixtureModel(t, 130, 46)
+			m.tab = tab
+			if enabled {
+				m.snap.Capture = capture.Snapshot{
+					Enabled: true, PPS: 120, BPS: 9e4, Packets: 5000,
+					Protocols: map[string]uint64{"tcp": 80, "udp": 20},
+					DNS:       []capture.Name{{Name: "nas.example.lan", Count: 4}},
+					SNI:       []capture.Name{{Name: "api.example.org", Count: 9}},
+					Flows:     []capture.Flow{{Src: "10.0.0.5:51000", Dst: "93.184.216.34:443", Proto: "tcp", Bytes: 2048}},
+					Recent:    []capture.Packet{{Proto: "udp", Src: "10.0.0.5:40000", Dst: "192.168.2.88:53", DNSName: "nas.example.lan", DNSType: "A"}},
+				}
 			}
-		}
-		for _, line := range strings.Split(m.View(), "\n") {
-			if w := lipgloss.Width(line); w != 130 {
-				t.Fatalf("capture=%v: line width %d: %q", enabled, w, line)
+			for _, line := range strings.Split(m.View(), "\n") {
+				if w := lipgloss.Width(line); w != 130 {
+					t.Fatalf("tab=%d capture=%v: line width %d: %q", tab, enabled, w, line)
+				}
 			}
 		}
 	}
