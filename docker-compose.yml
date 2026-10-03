@@ -8,6 +8,9 @@ services:
     # use the native binary there (see README).
     network_mode: host
     pid: host
+    # Reading other processes' sockets needs ptrace; Docker's default AppArmor profile blocks it.
+    cap_add: [SYS_PTRACE]
+    security_opt: ["apparmor=unconfined"]
     command: ["-dns", "${NETSCOPE_DNS:-auto}"]
     stdin_open: true
     tty: true
