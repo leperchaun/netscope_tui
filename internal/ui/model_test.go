@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -179,5 +180,18 @@ func TestEveryTabFitsWidth(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+func TestProcessListSaysWhenItIsCut(t *testing.T) {
+	m := newFixtureModel(t, 130, 20)
+	var conns []collector.Conn
+	for i := 0; i < 30; i++ {
+		name := fmt.Sprintf("proc%02d", i)
+		conns = append(conns, collector.Conn{Process: name, PID: int32(1000 + i), Remote: "10.0.0.1:443", State: "ESTABLISHED"})
+	}
+	m.snap.Conns = conns
+	if !strings.Contains(m.View(), "more processes") {
+		t.Fatal("a short panel should say how many processes are hidden")
 	}
 }

@@ -46,3 +46,30 @@ func TestKeyedValue(t *testing.T) {
 		t.Fatalf("got %d ok=%v", v, ok)
 	}
 }
+
+func TestParseNetstatUDPConnected(t *testing.T) {
+	line := "udp4       0      0  192.168.2.225.53511    192.168.2.88.443       4011         8200  131072  131072  com.apple.WebKit:10482  00180 00000000 0000 00000000 00000000"
+	r, ok := parseNetstatUDPRow(line)
+	if !ok || r.State != "UDP" || r.PID != 10482 || r.Rx != 4011 || r.Tx != 8200 || !r.HasIO {
+		t.Fatalf("bad udp parse: %+v ok=%v", r, ok)
+	}
+}
+
+func TestParseNetstatUDPSkipsUnconnected(t *testing.T) {
+	line := "udp4       0      0  *.61207                *.*                                           0         1024  786896    9216          syslogd:141"
+	if _, ok := parseNetstatUDPRow(line); ok {
+		t.Fatal("unconnected UDP socket should be skipped")
+	}
+}
+
+func TestDisplayNameFoldsWebKitIntoSafari(t *testing.T) {
+	for in, want := range map[string]string{
+		"com.apple.WebKit.Networking": "Safari",
+		"com.apple.WebKit.WebContent": "Safari",
+		"curl":                        "curl",
+	} {
+		if got := displayName(in); got != want {
+			t.Fatalf("displayName(%q)=%q want %q", in, got, want)
+		}
+	}
+}

@@ -162,10 +162,10 @@ func (s *Sampler) sockets(snap *Snapshot, now time.Time, raw []socketRow) {
 	seconds := elapsed.Seconds()
 
 	for _, r := range rows {
-		if r.State != "" {
+		if r.State != "" && r.State != "UDP" {
 			snap.TCPStates[r.State]++
 		}
-		if r.State != "ESTABLISHED" {
+		if r.State != "ESTABLISHED" && r.State != "UDP" {
 			continue
 		}
 		c := Conn{
@@ -233,7 +233,7 @@ func (s *Sampler) processName(pid int32) string {
 	name := "(unknown)"
 	if p, err := process.NewProcess(pid); err == nil {
 		if n, err := p.Name(); err == nil && n != "" {
-			name = n
+			name = displayName(n)
 		}
 	}
 	s.procNames[pid] = name
@@ -309,4 +309,13 @@ func rate(prev, cur uint64, seconds float64) float64 {
 
 func isLoopback(name string) bool {
 	return name == "lo" || strings.HasPrefix(name, "lo0")
+}
+
+// displayName folds helper processes into the app a person would recognise.
+// Safari's sockets belong to WebKit helpers (Networking, WebContent, GPU).
+func displayName(n string) string {
+	if strings.HasPrefix(n, "com.apple.WebKit.") {
+		return "Safari"
+	}
+	return n
 }

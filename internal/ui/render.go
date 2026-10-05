@@ -449,7 +449,8 @@ func (m Model) connBody(inner, rows int) []string {
 	out = append(out, muted.Render(l.row("", "PROCESS", "PID", "REMOTE", "PORT", "PROTO", "DOWN", "UP", "RTT", "STATE", "60s")))
 
 	for gi, grp := range groups {
-		if len(out) >= rows {
+		if len(out) >= rows-1 {
+			out = append(out, dim.Render(fmt.Sprintf("+%d more processes (sorted by traffic)", len(groups)-gi)))
 			break
 		}
 		marker := " "
@@ -469,7 +470,7 @@ func (m Model) connBody(inner, rows int) []string {
 			dim.Render(fmt.Sprintf("%s · %s", plural(len(grp.conns), "conn"), plural(len(distinctHosts(grp.conns)), "host"))),
 			"", "",
 			rateCell(grp.rx, grp.hasIO, rxStyle), rateCell(grp.tx, grp.hasIO, txStyle),
-			rttCell(grp.rtt, grp.hasRT), okStyle.Render("ESTAB"),
+			rttCell(grp.rtt, grp.hasRT), stateLabel(grp.conns),
 			brailleSpark(m.procHist[grp.name], 12)))
 		if !m.expanded[grp.name] {
 			continue
@@ -479,10 +480,14 @@ func (m Model) connBody(inner, rows int) []string {
 				break
 			}
 			host, port := splitRemote(c.Remote)
+			proto := "tcp"
+			if c.State == "UDP" {
+				proto = "udp"
+			}
 			out = append(out, l.row("  ", "", fmt.Sprintf("%d", c.PID),
-				trunc(host, l.remoteW), trunc(port, 6), "tcp",
+				trunc(host, l.remoteW), trunc(port, 6), proto,
 				rateCell(c.RxBps, c.HasIO, rxStyle), rateCell(c.TxBps, c.HasIO, txStyle),
-				rttCell(c.RTTms, c.RTTms >= 0), okStyle.Render("ESTAB"),
+				rttCell(c.RTTms, c.RTTms >= 0), stateCell(c.State),
 				brailleSpark(m.sockHist[c.Local+">"+c.Remote], 12)))
 		}
 	}
@@ -490,6 +495,27 @@ func (m Model) connBody(inner, rows int) []string {
 		out = out[:rows]
 	}
 	return out
+}
+
+// stateLabel summarises a process's sockets: one state, or "mixed".
+func stateLabel(conns []collector.Conn) string {
+	first := conns[0].State
+	for _, c := range conns[1:] {
+		if c.State != first {
+			return dim.Render("mixed")
+		}
+	}
+	return stateCell(first)
+}
+
+func stateCell(state string) string {
+	switch state {
+	case "ESTABLISHED":
+		return okStyle.Render("ESTAB")
+	case "UDP":
+		return accentB.Render("UDP")
+	}
+	return muted.Render(state)
 }
 
 func rateCell(bps float64, known bool, style lipgloss.Style) string {

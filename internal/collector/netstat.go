@@ -33,18 +33,68 @@ func connKey(lip string, lport uint32, rip string, rport uint32) string {
 // netstatRows reads per-socket byte counters and PIDs from the kernel socket table.
 // Unlike lsof, it sees sockets owned by system daemons without root.
 func netstatRows() ([]socketRow, error) {
-	raw, err := exec.Command("netstat", "-anv", "-p", "tcp").Output()
+	return netstatProto("tcp", parseNetstatRow)
+}
+
+// netstatUDPRows returns connected UDP sockets (QUIC and DNS flows), which carry no TCP state.
+func netstatUDPRows() ([]socketRow, error) {
+	return netstatProto("udp", parseNetstatUDPRow)
+}
+
+func netstatProto(proto string, parse func(string) (socketRow, bool)) ([]socketRow, error) {
+	raw, err := exec.Command("netstat", "-anv", "-p", proto).Output()
 	if err != nil {
 		return nil, err
 	}
 	var out []socketRow
 	sc := bufio.NewScanner(bytes.NewReader(raw))
 	for sc.Scan() {
-		if r, ok := parseNetstatRow(sc.Text()); ok {
+		if r, ok := parse(sc.Text()); ok {
 			out = append(out, r)
 		}
 	}
 	return out, nil
+}
+
+// parseNetstatUDPRow handles connected UDP sockets. Unconnected sockets (foreign "*.*") are skipped.
+// UDP rows have no state column, so the byte counters come straight after the foreign address.
+func parseNetstatUDPRow(line string) (socketRow, bool) {
+	f := strings.Fields(line)
+	if len(f) < 6 || !strings.HasPrefix(f[0], "udp") {
+		return socketRow{}, false
+	}
+	if f[4] == "*.*" {
+		return socketRow{}, false
+	}
+	lip, lport, ok := splitNetstatAddr(f[3])
+	if !ok {
+		return socketRow{}, false
+	}
+	rip, rport, ok := splitNetstatAddr(f[4])
+	if !ok {
+		return socketRow{}, false
+	}
+	r := socketRow{LocalIP: lip, LocalPort: lport, RemoteIP: rip, RemotePort: rport, State: "UDP", RTTms: -1}
+	start := 5
+	if _, err := strconv.ParseUint(f[5], 10, 64); err != nil && len(f) > 6 {
+		start = 6
+	}
+	if len(f) >= start+2 {
+		rx, errR := strconv.ParseUint(f[start], 10, 64)
+		tx, errT := strconv.ParseUint(f[start+1], 10, 64)
+		if errR == nil && errT == nil {
+			r.Rx, r.Tx, r.HasIO = rx, tx, true
+		}
+	}
+	for _, field := range f[start:] {
+		if i := strings.LastIndex(field, ":"); i > 0 {
+			if pid, err := strconv.ParseInt(field[i+1:], 10, 32); err == nil {
+				r.PID = int32(pid)
+				break
+			}
+		}
+	}
+	return r, true
 }
 
 // parseNetstatRow handles rows like:

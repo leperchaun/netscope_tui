@@ -19,6 +19,9 @@ func socketRows() []socketRow {
 	switch runtime.GOOS {
 	case "darwin":
 		if rows, err := netstatRows(); err == nil && len(rows) > 0 {
+			if udp, err := netstatUDPRows(); err == nil {
+				rows = append(rows, udp...)
+			}
 			return rows
 		}
 		return gopsutilRows()
