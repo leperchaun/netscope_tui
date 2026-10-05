@@ -42,7 +42,7 @@ func netstatUDPRows() ([]socketRow, error) {
 }
 
 func netstatProto(proto string, parse func(string) (socketRow, bool)) ([]socketRow, error) {
-	raw, err := exec.Command("netstat", "-anv", "-p", proto).Output()
+	raw, err := exec.Command("netstat", "-anv", "-p", proto).Output() // #nosec G204 -- proto is the constant "tcp" or "udp"
 	if err != nil {
 		return nil, err
 	}
