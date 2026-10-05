@@ -1,0 +1,48 @@
+name: security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  static-analysis:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install scanners
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@v2.29.0
+          go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
+          go install honnef.co/go/tools/cmd/staticcheck@v0.8.1
+          go install github.com/zricethezav/gitleaks/v8@v8.30.1
+      # Run every scanner even if an earlier one fails, so one run shows all findings.
+      - name: gitleaks, staticcheck, gosec, govulncheck
+        run: |
+          rc=0
+          echo "== gitleaks";    gitleaks dir --no-banner --redact . || rc=1
+          echo "== staticcheck"; staticcheck ./... || rc=1
+          echo "== gosec";       gosec -quiet ./... || rc=1
+          echo "== govulncheck"; govulncheck ./... || rc=1
+          exit $rc
+
+  image-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build release image
+        run: docker build -t netscope:scan .
+      - name: Trivy scan (HIGH/CRITICAL with a fix available)
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy:0.75.0 image --quiet --scanners vuln \
+            --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 netscope:scan
